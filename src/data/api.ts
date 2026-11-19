@@ -76,6 +76,61 @@ async function call<T>(path: string, body?: object): Promise<T> {
   return json as T;
 }
 
+// ───────────── Vidéos importées depuis l'ordinateur ─────────────
+
+/** Taille maximale d'une vidéo importée (doit correspondre à VIDEO_MAX_MB du serveur). */
+export const VIDEO_MAX_MB = 500;
+export const VIDEO_TYPES = ['video/mp4', 'video/x-m4v', 'video/quicktime', 'video/webm'];
+/** Lien d'une vidéo hébergée par le serveur (et donc à supprimer quand elle est remplacée ou retirée). */
+export const isUploadedVideo = (url?: string | null) => !!url && /\/uploads\/videos\/[A-Za-z0-9_-]+\.(mp4|mov|webm)$/.test(url);
+
+/**
+ * Envoie une vidéo au serveur (corps brut, en flux) avec la progression (0 → 1).
+ * `file` : le fichier choisi (Blob / File sur le site ; sur téléphone, lu depuis son adresse locale).
+ * Renvoie le lien public de la vidéo. `abort` (optionnel) permet d'annuler l'envoi.
+ */
+export async function uploadVideo(
+  file: Blob,
+  type: string,
+  onProgress: (p: number) => void,
+  abort?: { cancel?: () => void },
+): Promise<string> {
+  await loadSession();
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_URL}/api/upload/video`);
+    xhr.setRequestHeader('Content-Type', type);
+    if (session) xhr.setRequestHeader('Authorization', `Bearer ${session.token}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      let json: { url?: string; code?: string; details?: unknown } = {};
+      try {
+        json = JSON.parse(xhr.responseText);
+      } catch {
+        /* réponse vide */
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && json.url) resolve(json.url);
+      else reject(new ApiError(xhr.status, json.code ?? (xhr.status === 413 ? 'too-large' : 'internal'), json.details));
+    };
+    xhr.onerror = () => reject(new ApiError(0, 'auth/network-request-failed'));
+    xhr.onabort = () => reject(new ApiError(0, 'aborted'));
+    if (abort) abort.cancel = () => xhr.abort();
+    xhr.send(file);
+  });
+}
+
+/** Supprime une vidéo hébergée par le serveur (sans effet pour un lien YouTube / Facebook). */
+export async function deleteUploadedVideo(url?: string | null): Promise<void> {
+  if (!isApiConfigured || !isUploadedVideo(url)) return;
+  try {
+    await call('/upload/video/delete', { url });
+  } catch (e) {
+    console.warn('[vidéo] suppression impossible', e);
+  }
+}
+
 // ───────────── Temps réel (WebSocket) ─────────────
 
 type Sub = { msg: object; cb: (m: { t: string; rows?: unknown[]; doc?: unknown }) => void };

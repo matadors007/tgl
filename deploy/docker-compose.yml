@@ -38,6 +38,8 @@ services:
       # Jeton Expo (« Enhanced Security for Push Notifications ») : seul le serveur peut envoyer des notifications
       EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
       PORT: 8080
+    volumes:
+      - uploads:/data/uploads
 
   web:
     build:
@@ -59,6 +61,8 @@ services:
     volumes:
       - caddy_data:/data
       - caddy_config:/config
+      # Vidéos importées depuis l’ordinateur, servies sous /uploads/… (lecture seule)
+      - uploads:/srv/uploads:ro
 
   backup:
     image: docker.io/library/postgres:16-alpine
@@ -76,5 +80,6 @@ services:
 
 volumes:
   pgdata:
+  uploads:
   caddy_data:
   caddy_config:

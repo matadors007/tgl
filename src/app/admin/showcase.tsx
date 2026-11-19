@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
-import { Image, Pressable, Switch, Text, View } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import React, { useEffect, useRef, useState } from 'react';
+import { Image, Platform, Pressable, Switch, Text, View } from 'react-native';
 import { useApp } from '@/data/AppProvider';
+import { deleteUploadedVideo, isApiConfigured, isUploadedVideo, uploadVideo, VIDEO_MAX_MB, VIDEO_TYPES } from '@/data/api';
 import { videoSource, videoThumbnail, type Pitch, type ShowcaseItem } from '@/domain/model';
 import { Guard } from '@/ui/Guard';
 import { ask, notify } from '@/ui/dialogs';
@@ -65,11 +67,95 @@ export function PhotoPicker({ value, onChange }: { value: string; onChange: (v: 
   );
 }
 
+/** Type de la vidéo choisie (le PC ne le donne pas toujours : déduit de l'extension). */
+function videoType(name: string, mime?: string | null): string | null {
+  if (mime && VIDEO_TYPES.includes(mime)) return mime;
+  const ext = name.toLowerCase().split('.').pop();
+  return ext === 'mp4' || ext === 'm4v' ? 'video/mp4' : ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : null;
+}
+
+/** Bouton « Importer depuis l'ordinateur » : envoi au serveur avec progression, puis lien rempli automatiquement. */
+function VideoUploader({ onUploaded, onBusy }: { onUploaded: (url: string, name: string) => void; onBusy: (b: boolean) => void }) {
+  const { t } = useApp();
+  const [progress, setProgress] = useState<number | null>(null);
+  const [fileName, setFileName] = useState('');
+  const abort = useRef<{ cancel?: () => void }>({});
+
+  const pick = async () => {
+    const res = await DocumentPicker.getDocumentAsync({ type: Platform.OS === 'web' ? VIDEO_TYPES.join(',') + ',.mov,.m4v' : 'video/*', multiple: false });
+    if (res.canceled || !res.assets?.length) return;
+    const asset = res.assets[0];
+    const type = videoType(asset.name ?? '', asset.mimeType);
+    if (!type) return notify(t('showcase.uploadType'));
+    if (asset.size && asset.size > VIDEO_MAX_MB * 1024 * 1024) return notify(t('showcase.uploadTooBig', { n: VIDEO_MAX_MB }));
+    setFileName(asset.name ?? '');
+    setProgress(0);
+    onBusy(true);
+    try {
+      // Site : le fichier lui-même ; téléphone : lu depuis son adresse locale
+      const blob: Blob = (asset as { file?: File }).file ?? (await (await fetch(asset.uri)).blob());
+      abort.current = {};
+      const url = await uploadVideo(blob, type, setProgress, abort.current);
+      onUploaded(url, asset.name ?? '');
+    } catch (e) {
+      const code = (e as { code?: string })?.code;
+      if (code !== 'aborted')
+        notify(
+          code === 'too-large'
+            ? t('showcase.uploadTooBig', { n: VIDEO_MAX_MB })
+            : code === 'unsupported-type'
+              ? t('showcase.uploadType')
+              : t('showcase.uploadErr'),
+        );
+    } finally {
+      setProgress(null);
+      onBusy(false);
+    }
+  };
+
+  if (progress !== null) {
+    const pct = Math.round(progress * 100);
+    return (
+      <View style={{ marginBottom: 12, padding: 12, borderRadius: radius.md, backgroundColor: colors.cardAlt, borderWidth: 1, borderColor: colors.border }}>
+        <Row style={{ marginBottom: 8 }}>
+          <Ionicons name="cloud-upload" size={18} color={colors.accent} />
+          <Text style={[font.small, { flex: 1, marginLeft: 8, fontWeight: '700' }]} numberOfLines={1}>
+            {t('showcase.uploading', { p: pct })} · {fileName}
+          </Text>
+        </Row>
+        <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.border, overflow: 'hidden' }}>
+          <View style={{ width: `${pct}%`, height: '100%', backgroundColor: colors.accent }} />
+        </View>
+        <Button small variant="ghost" label={t('common.cancel')} icon="close" onPress={() => abort.current.cancel?.()} style={{ marginTop: 8 }} />
+      </View>
+    );
+  }
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Button label={t('showcase.uploadVideo')} icon="cloud-upload" variant="secondary" onPress={pick} />
+      <Text style={[font.tiny, { marginTop: 6 }]}>{t('showcase.uploadHint', { n: VIDEO_MAX_MB })}</Text>
+    </View>
+  );
+}
+
 function ItemsTab({ kind }: { kind: 'slide' | 'video' }) {
   const { t, showcase, services } = useApp();
   const items = showcase.filter((i) => i.kind === kind);
   const [edit, setEdit] = useState<Partial<ShowcaseItem> | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  /** Vidéo envoyée pendant cette édition mais pas encore enregistrée (supprimée si on abandonne). */
+  const pendingUpload = useRef<string | null>(null);
+
+  const dropPending = (keep?: string | null) => {
+    if (pendingUpload.current && pendingUpload.current !== keep) void deleteUploadedVideo(pendingUpload.current);
+    pendingUpload.current = null;
+  };
+  const closeSheet = () => {
+    if (uploading) return;
+    dropPending();
+    setEdit(null);
+  };
 
   const save = async () => {
     if (!edit) return;
@@ -78,6 +164,8 @@ function ItemsTab({ kind }: { kind: 'slide' | 'video' }) {
     if (kind === 'video' && !edit.title?.trim()) return notify(t('auth.errFields'));
     setBusy(true);
     try {
+      const previous = edit.id ? items.find((i) => i.id === edit.id)?.videoUrl : null;
+      const nextUrl = kind === 'video' ? edit.videoUrl?.trim() ?? null : null;
       await services.saveShowcase({
         id: edit.id,
         createdAt: edit.createdAt,
@@ -89,6 +177,9 @@ function ItemsTab({ kind }: { kind: 'slide' | 'video' }) {
         order: edit.order ?? (items.length ? Math.max(...items.map((i) => i.order)) + 1 : 0),
         active: edit.active ?? true,
       });
+      // Vidéo remplacée : l'ancien fichier hébergé est supprimé ; une vidéo envoyée puis remplacée par un lien aussi
+      if (previous && previous !== nextUrl) void deleteUploadedVideo(previous);
+      dropPending(nextUrl);
       setEdit(null);
     } catch {
       notify(t('common.error'));
@@ -110,6 +201,7 @@ function ItemsTab({ kind }: { kind: 'slide' | 'video' }) {
   const remove = async (it: ShowcaseItem) => {
     if (!(await ask(t('common.delete'), it.title || '', t('common.delete'), t('common.cancel')))) return;
     await services.deleteShowcase(it.id);
+    void deleteUploadedVideo(it.videoUrl);
   };
 
   return (
@@ -162,9 +254,25 @@ function ItemsTab({ kind }: { kind: 'slide' | 'video' }) {
         })}
       </View>
 
-      <Sheet visible={!!edit} onClose={() => setEdit(null)} title={kind === 'slide' ? t('showcase.addSlide') : t('showcase.addVideo')}>
+      <Sheet visible={!!edit} onClose={closeSheet} title={kind === 'slide' ? t('showcase.addSlide') : t('showcase.addVideo')}>
         {edit ? (
           <View>
+            {kind === 'video' && isApiConfigured ? (
+              <VideoUploader
+                onBusy={setUploading}
+                onUploaded={(url, name) => {
+                  dropPending();
+                  pendingUpload.current = url;
+                  setEdit((e) => (e ? { ...e, videoUrl: url, title: e.title?.trim() ? e.title : name.replace(/\.[^.]+$/, '') } : e));
+                }}
+              />
+            ) : null}
+            {kind === 'video' && isUploadedVideo(edit.videoUrl) ? (
+              <Row style={{ marginBottom: 12, gap: 8 }}>
+                <Ionicons name="checkmark-circle" size={18} color={colors.accent} />
+                <Text style={[font.small, { flex: 1, fontWeight: '700' }]}>{t('showcase.uploadDone')}</Text>
+              </Row>
+            ) : null}
             {kind === 'video' ? (
               <Field label={t('showcase.videoUrl')} value={edit.videoUrl ?? ''} onChangeText={(v) => setEdit({ ...edit, videoUrl: v })} autoCapitalize="none" placeholder="https://youtu.be/…" />
             ) : null}
@@ -172,7 +280,7 @@ function ItemsTab({ kind }: { kind: 'slide' | 'video' }) {
             <Field label={t('showcase.subtitle')} value={edit.subtitle ?? ''} onChangeText={(v) => setEdit({ ...edit, subtitle: v })} />
             {kind === 'video' ? <Text style={[font.small, { marginBottom: 8 }]}>{t('showcase.thumbHint')}</Text> : null}
             <PhotoPicker value={edit.image ?? ''} onChange={(v) => setEdit({ ...edit, image: v })} />
-            <Button label={t('common.save')} icon="save" onPress={save} loading={busy} />
+            <Button label={t('common.save')} icon="save" onPress={save} loading={busy} disabled={uploading} />
           </View>
         ) : null}
       </Sheet>

@@ -6,6 +6,7 @@ import { ApiError, authRouter } from './auth.js';
 import { dataRouter } from './data.js';
 import { notifyRouter } from './notify.js';
 import { attachRealtime } from './realtime.js';
+import { uploadRouter } from './upload.js';
 
 const app = express();
 app.set('trust proxy', 1); // derrière Caddy
@@ -48,6 +49,7 @@ app.get('/api/health', async (_req, res) => {
 app.use('/api/auth', authRouter());
 app.use('/api/db', dataRouter());
 app.use('/api/notify', notifyRouter());
+app.use('/api/upload', uploadRouter());
 
 app.use((_req, res) => res.status(404).json({ code: 'not-found' }));
 // eslint-disable-next-line no-unused-vars
@@ -67,6 +69,8 @@ app.use((err, _req, res, _next) => {
 const port = Number(process.env.PORT ?? 8080);
 await migrate();
 const server = http.createServer(app);
+// Envoi d'une vidéo (jusqu'à 500 Mo) sur une connexion lente : plus de 5 minutes possibles
+server.requestTimeout = 60 * 60_000;
 attachRealtime(server);
 server.listen(port, () => console.log(`API prête sur le port ${port}`));
 

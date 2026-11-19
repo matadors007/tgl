@@ -7,6 +7,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY src ./src
 COPY migrations ./migrations
 COPY test ./test
+# Vidéos importées depuis l'ordinateur (volume « uploads », écrit par l'API, servi par Caddy)
+RUN mkdir -p /data/uploads/videos && chown -R node:node /data/uploads
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- http://127.0.0.1:8080/api/health || exit 1

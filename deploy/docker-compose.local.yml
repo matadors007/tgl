@@ -39,6 +39,8 @@ services:
       CORS_ORIGINS: http://localhost:8080
       # Sans SMTP : les codes d'activation et liens « mot de passe oublié » s'affichent dans les journaux de l'API
       PORT: 8080
+    volumes:
+      - uploads_local:/data/uploads
 
   web:
     restart: always
@@ -53,6 +55,9 @@ services:
       - api
     ports:
       - "8080:80"
+    volumes:
+      # Vidéos importées depuis l’ordinateur, servies sous /uploads/… (lecture seule)
+      - uploads_local:/srv/uploads:ro
 
   adminer:
     restart: always
@@ -67,3 +72,4 @@ services:
 
 volumes:
   pgdata_local:
+  uploads_local:

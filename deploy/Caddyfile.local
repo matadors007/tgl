@@ -1,6 +1,8 @@
 # Essai sur le PC (Podman / Docker Desktop) : http://localhost:8080, sans certificat
 :80 {
-	encode zstd gzip
+	# Compression, sauf les vidéos (déjà compressées ; garde l'avance rapide dans la lecture)
+	@compressible not path /uploads/*
+	encode @compressible zstd gzip
 	handle /api/* {
 		reverse_proxy api:8080
 	}
@@ -14,6 +16,12 @@
 		# Règle de contenu : scripts du site seulement, échanges de données avec l'API du site seulement
 		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws://localhost:8080; frame-src 'self' data: blob: https://www.youtube.com https://www.youtube-nocookie.com https://www.facebook.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		-Server
+	}
+	# Vidéos importées depuis l'ordinateur (volume « uploads ») : fichier absent → 404, pas la page du site
+	handle /uploads/* {
+		root * /srv
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
 	}
 	handle {
 		root * /srv
