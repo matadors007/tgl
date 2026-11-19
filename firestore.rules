@@ -1,0 +1,195 @@
+rules_version = '2';
+
+// Règles de sécurité Tunisia Golden League (déployées automatiquement par setup-firebase)
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return get(/databases/$(db)/documents/users/$(request.auth.uid)).data; }
+    // Rôles : user, company, operator, agent, admin
+    function staffRole() { return signedIn() && me().role in ['agent', 'operator', 'admin']; }
+    // Permissions par compte (réglées dans Gestion du personnel) ; sans réglage : valeur par défaut du rôle
+    // (identique à roleDefaultPerm() dans src/domain/model.ts)
+    function roleDefault(role, p) {
+      return role == 'admin'
+        || (role == 'agent' && p in ['planning', 'queue'])
+        || (role == 'operator' && p in ['matches.live', 'matches.sheet']);
+    }
+    function permOf(u, p) {
+      return u.role in ['agent', 'operator', 'admin']
+        && (('perms' in u && u.perms != null && p in u.perms) ? u.perms[p] == true : roleDefault(u.role, p));
+    }
+    function perm(p) { return signedIn() && permOf(me(), p); }
+    function pitchStaff() { return perm('queue') || perm('planning') || perm('private') || perm('pitches.manage') || perm('slots.config'); }
+    function isStaff() { return perm('queue') || perm('planning'); }                     // réservations
+    function canOperate() { return perm('matches.live') || perm('matches.sheet'); }      // matchs
+    function champStaff() { return perm('champ.edit') || perm('champ.delete') || perm('teams.validate') || perm('matches.calendar'); }
+    function isAdmin() { return signedIn() && me().role == 'admin'; }
+    function isCompany() { return signedIn() && me().role == 'company'; }
+    // L'entreprise connectée possède l'équipe (inscrite par elle, ou rattachée par l'admin)
+    function ownsTeam(teamId) {
+      return isCompany()
+        && (get(/databases/$(db)/documents/teams/$(teamId)).data.get('ownerId', '') == request.auth.uid
+            || me().get('teamId', '') == teamId);
+    }
+    // Date limite d'ajout des joueurs du championnat (absente = pas de limite)
+    function rosterOpen(seasonId) {
+      let d = get(/databases/$(db)/documents/seasons/$(seasonId)).data.get('rosterDeadlineAt', null);
+      return d == null || request.time.toMillis() <= d;
+    }
+    function onlyKeys(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+
+    // Paramètres et terrains : lecture publique, écriture admin
+    // (clé WhatsApp : administration seulement, comme sur le serveur — l'ancien mode Firebase ne l'envoie plus aux téléphones)
+    match /config/{id}  { allow read: if id != 'whatsapp' || perm('settings'); allow write: if perm('settings'); }
+    // Vitrine : photos du carrousel et vidéos — lecture publique, écriture admin
+    match /showcase/{id} { allow read: if true; allow write: if perm('showcase'); }
+    match /pitches/{id} { allow read: if true; allow write: if perm('pitches.manage') || perm('slots.config') || perm('showcase'); }
+
+    // Profils : chacun le sien (sans pouvoir changer son rôle ni son équipe) ; l'admin gère les rôles
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || staffRole());
+      // inscription : client ou entreprise (sans équipe : elle sera rattachée à la validation)
+      // l'administrateur crée les comptes du personnel / des entreprises (Gestion du personnel)
+      allow create: if perm('staff') || signedIn() && request.auth.uid == uid
+        && (request.resource.data.role == 'user'
+            || (request.resource.data.role == 'company' && request.resource.data.get('teamId', null) == null));
+      allow update: if perm('staff') || champStaff()
+        || (signedIn() && request.auth.uid == uid
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'teamId', 'companyName', 'perms']));
+      allow delete: if perm('staff');
+    }
+
+    // Créneaux : lecture publique. Un utilisateur peut seulement "prendre" un créneau libre
+    // (ou dont la demande a expiré) en le liant à SA demande, ou libérer sa propre demande.
+    match /slots/{id} {
+      allow read: if true;
+      // personnel des terrains (réservations, blocages, créneaux privés) et calendrier du championnat
+      allow write: if pitchStaff() || perm('matches.calendar') || perm('champ.edit') || perm('champ.delete');
+      allow create, update: if signedIn()
+        && request.resource.data.status == 'pending'
+        && getAfter(/databases/$(db)/documents/bookings/$(request.resource.data.bookingId)).data.userId == request.auth.uid
+        && (resource == null
+            || resource.data.status == 'free'
+            || (resource.data.status == 'pending' && resource.data.expiresAt < request.time.toMillis()));
+      allow delete: if signedIn()
+        && resource.data.status == 'pending'
+        && get(/databases/$(db)/documents/bookings/$(resource.data.bookingId)).data.userId == request.auth.uid;
+    }
+
+    // Demandes de réservation
+    match /bookings/{id} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || isStaff());
+      allow create: if isStaff()
+        // seuls les comptes clients ("user") demandent une réservation (pas les entreprises)
+        // compte particulier dont l'adresse e-mail a été confirmée
+        || (signedIn() && me().role == 'user' && request.auth.token.email_verified == true
+            && request.resource.data.userId == request.auth.uid && request.resource.data.status == 'pending');
+      allow update: if isStaff()
+        || (signedIn() && resource.data.userId == request.auth.uid
+            && resource.data.status == 'pending' && request.resource.data.status == 'cancelled');
+      allow delete: if isAdmin();
+    }
+
+    // Réservations privées (client au téléphone) : administrateur uniquement
+    match /privateBookings/{id} {
+      allow read, write: if perm('private');
+    }
+
+    // Jetons de notifications push (document = jeton de l'appareil)
+    match /pushTokens/{id} {
+      allow create, update: if ((request.auth == null && request.resource.data.userId == null)
+                                || (signedIn() && request.resource.data.userId == request.auth.uid))
+                            && (request.resource.data.staff == false || staffRole());
+      // lecture : le personnel (réservations, matchs), et tout client connecté
+      // pour les seuls jetons du personnel (prévenir d'une nouvelle demande)
+      allow read: if staffRole() || (signedIn() && resource.data.staff == true);
+      allow delete: if isAdmin();
+    }
+
+    // Championnat et actualités : lecture publique, écriture admin
+    match /seasons/{id} {
+      allow read: if true;
+      allow create: if perm('champ.create');
+      allow update: if perm('champ.edit');
+      allow delete: if perm('champ.delete');
+      // la console du match passe seulement le championnat "en cours" au premier coup d'envoi
+      allow update: if perm('matches.live') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+    }
+    match /teams/{id} {
+      allow read: if true;
+      allow write: if perm('champ.edit') || perm('champ.delete') || perm('teams.validate');
+      // BF07 : une entreprise inscrit son équipe (en attente de validation) pendant les inscriptions
+      allow create: if isCompany()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.approved == false
+        && request.resource.data.get('requestStatus', 'draft') == 'draft'
+        && get(/databases/$(db)/documents/seasons/$(request.resource.data.seasonId)).data.status == 'registration';
+      // l'entreprise complète sa demande (logo, responsables, entraîneur, pièces collectives) et l'envoie ;
+      // seule l'administration peut valider (approved / requestStatus "approved")
+      allow update: if signedIn() && resource.data.get('ownerId', '') == request.auth.uid
+        && onlyKeys(['name', 'shortName', 'color', 'logoUrl', 'managers', 'coach',
+                     'collectiveAttestationId', 'collectiveCertificateId',
+                     'collectiveAttestationPromised', 'collectiveCertificatePromised',
+                     'requestStatus', 'submittedAt', 'rejectReason', 'approved'])
+        && request.resource.data.get('approved', false) == resource.data.get('approved', false)
+        && request.resource.data.get('requestStatus', 'draft') in ['draft', 'submitted', resource.data.get('requestStatus', 'approved')];
+    }
+    match /players/{id} {
+      allow read: if true;
+      allow write: if perm('champ.edit') || perm('champ.delete') || perm('teams.validate') || perm('matches.sheet');
+      // BF07/BF08 : l'entreprise crée et modifie ses joueurs, qui restent "brouillon" ou "en attente"
+      // (seul l'administrateur peut les valider ou les refuser) — jusqu'à la date limite du championnat
+      allow create: if ownsTeam(request.resource.data.teamId)
+        && request.resource.data.status in ['draft', 'pending']
+        && rosterOpen(request.resource.data.seasonId);
+      allow update: if ownsTeam(resource.data.teamId)
+        && request.resource.data.teamId == resource.data.teamId
+        && request.resource.data.get('licenseNo', null) == resource.data.get('licenseNo', null)
+        && (request.resource.data.status in ['draft', 'pending']
+            // après validation : numéro de maillot et poste seulement
+            || onlyKeys(['number', 'position'])
+            // joueur validé retiré par l'entreprise : licence désactivée, la place reste prise
+            || (resource.data.get('status', 'approved') == 'approved'
+                && request.resource.data.status == 'removed' && onlyKeys(['status', 'removedAt'])));
+      allow delete: if ownsTeam(resource.data.teamId) && resource.data.get('status', 'approved') != 'approved';
+    }
+    // Données personnelles des joueurs (CIN, téléphone…) : l'entreprise propriétaire et l'admin uniquement
+    match /playerInfo/{id} {
+      allow read: if perm('teams.validate') || perm('licences') || perm('champ.edit') || (signedIn() && resource.data.ownerId == request.auth.uid);
+      allow create, update: if perm('teams.validate') || perm('champ.edit')
+        || (request.resource.data.ownerId == request.auth.uid && ownsTeam(request.resource.data.teamId));
+      allow delete: if perm('champ.edit') || perm('champ.delete') || (signedIn() && resource.data.ownerId == request.auth.uid);
+    }
+    // Codes OTP : uniquement manipulés par les fonctions serveur (jamais lisibles par l'app)
+    match /otpCodes/{id} { allow read, write: if false; }
+
+    // Pièces jointes des inscriptions (CIN, photo, attestation, certificat) : l'entreprise qui les envoie et l'admin
+    match /files/{id} {
+      allow read: if perm('teams.validate') || perm('licences') || perm('champ.edit') || (signedIn() && resource.data.ownerId == request.auth.uid);
+      allow create: if perm('teams.validate') || perm('champ.edit')
+        || (signedIn() && request.resource.data.ownerId == request.auth.uid && ownsTeam(request.resource.data.teamId));
+      allow delete: if perm('champ.edit') || perm('champ.delete') || (signedIn() && resource.data.ownerId == request.auth.uid);
+    }
+    match /matches/{id} {
+      allow read: if true;
+      allow create, delete: if perm('matches.calendar') || perm('champ.edit') || perm('champ.delete');
+      allow update: if perm('matches.live') || perm('matches.sheet') || perm('matches.calendar');   // score, statut, feuille de match, date
+      // BF09 : l'entreprise choisit ses joueurs jusqu'à 12 h avant le coup d'envoi
+      allow update: if resource.data.status in ['scheduled', 'postponed']
+        && request.time.toMillis() < resource.data.plannedAt - 43200000
+        && ((ownsTeam(resource.data.homeTeamId) && onlyKeys(['homeLineup']))
+            || (ownsTeam(resource.data.awayTeamId) && onlyKeys(['awayLineup'])));
+    }
+    // Boîte de notifications in-app
+    match /inbox/{id} {
+      allow read: if signedIn()
+        && (resource.data.userId == request.auth.uid || (resource.data.audience == 'staff' && staffRole()));
+      // tout compte peut prévenir le personnel ; seul le personnel écrit à un utilisateur précis
+      allow create: if signedIn() && (request.resource.data.audience == 'staff' || staffRole());
+      allow delete: if perm('staff');
+    }
+    match /events/{id}  { allow read: if true; allow write: if perm('matches.live') || perm('champ.edit') || perm('champ.delete'); }  // buts, passes, cartons
+    match /news/{id}    { allow read: if true; allow write: if perm('news'); }
+  }
+}

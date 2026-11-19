@@ -1,0 +1,41 @@
+# Caddy : HTTPS automatique (Let's Encrypt), site web + API + temps réel
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# API et temps réel → conteneur « api »
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+	handle /ws {
+		reverse_proxy api:8080
+	}
+
+	# Site web (application Expo exportée)
+	handle {
+		root * /srv
+		@static path /_expo/static/* /assets/*
+		header @static Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} {path}.html /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# Règle de contenu : scripts du site seulement, échanges de données avec l'API du site seulement
+		# (un script injecté ne pourrait pas envoyer la session vers un autre serveur par fetch/WebSocket)
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' wss://{$DOMAIN}; frame-src 'self' data: blob: https://www.youtube.com https://www.youtube-nocookie.com https://www.facebook.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		-Server
+	}
+}
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}

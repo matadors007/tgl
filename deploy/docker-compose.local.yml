@@ -1,0 +1,69 @@
+# Tunisia Golden League — ESSAI SUR LE PC (Podman Desktop ou Docker Desktop)
+#   podman compose -f deploy/docker-compose.local.yml up -d --build      (ou lancer-local.bat)
+#
+#   Site + application web : http://localhost:8080
+#   Consulter la base      : http://localhost:8081  (Adminer)
+#   Base pour DBeaver/pgAdmin : localhost:5432, utilisateur tgl, mot de passe tgl_local, base tgl
+#
+# Mots de passe d'essai seulement : ne jamais utiliser ce fichier sur le serveur.
+name: tgl-local
+
+services:
+  db:
+    restart: always
+    image: docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_USER: tgl
+      POSTGRES_DB: tgl
+      POSTGRES_PASSWORD: tgl_local
+    volumes:
+      - pgdata_local:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tgl -d tgl"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    restart: always
+    build: ../server
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://tgl:tgl_local@db:5432/tgl
+      JWT_SECRET: essai-local-uniquement-0123456789abcdef0123456789
+      SITE_URL: http://localhost:8080
+      CORS_ORIGINS: http://localhost:8080
+      # Sans SMTP : les codes d'activation et liens « mot de passe oublié » s'affichent dans les journaux de l'API
+      PORT: 8080
+
+  web:
+    restart: always
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      args:
+        EXPO_PUBLIC_API_URL: http://localhost:8080
+        EXPO_PUBLIC_SITE_URL: http://localhost:8080
+        CADDYFILE: deploy/Caddyfile.local
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+  adminer:
+    restart: always
+    image: docker.io/library/adminer:latest
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+      ADMINER_DESIGN: dracula
+    depends_on:
+      - db
+    ports:
+      - "127.0.0.1:8081:8080"
+
+volumes:
+  pgdata_local:

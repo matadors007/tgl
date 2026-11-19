@@ -1,0 +1,80 @@
+# Tunisia Golden League — serveur complet (site web + API + base de données + sauvegardes)
+# Sur le VPS :  cd /opt/tgl/deploy && docker compose up -d --build
+name: tgl
+
+services:
+  db:
+    image: docker.io/library/postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tgl
+      POSTGRES_DB: tgl
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tgl -d tgl"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Pas de port ouvert vers l'extérieur : la base n'est joignable que par l'API
+
+  api:
+    build: ../server
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://tgl:${POSTGRES_PASSWORD}@db:5432/tgl
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET manquant dans .env}
+      SITE_URL: https://${DOMAIN}
+      CORS_ORIGINS: https://${DOMAIN},https://www.${DOMAIN}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM:-}
+      # Jeton Expo (« Enhanced Security for Push Notifications ») : seul le serveur peut envoyer des notifications
+      EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
+      PORT: 8080
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      args:
+        EXPO_PUBLIC_API_URL: https://${DOMAIN}
+        EXPO_PUBLIC_SITE_URL: https://${DOMAIN}
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN manquant dans .env}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL manquant dans .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+  backup:
+    image: docker.io/library/postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      TZ: Africa/Tunis
+    volumes:
+      - ./backups:/backups
+      - ./backup.sh:/backup.sh:ro
+    entrypoint: ["/bin/sh", "/backup.sh"]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

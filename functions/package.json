@@ -1,0 +1,16 @@
+{
+  "name": "tgl-functions",
+  "description": "Tunisia Golden League — fonctions serveur (codes OTP par e-mail)",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "private": true,
+  "dependencies": {
+    "firebase-admin": "13.10.0",
+    "firebase-functions": "7.4.0",
+    "nodemailer": "7.0.13",
+    "tunisia-golden-academy": "file:.."
+  }
+}

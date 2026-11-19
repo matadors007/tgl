@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Tunisia Golden League",
+    "slug": "tunisia-golden-academy",
+    "version": "1.2.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "tn.tunisiagoldenleague.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#111111",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "tn.tunisiagoldenleague.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "L'application a besoin d'accéder à vos photos pour ajouter des images des terrains."
+        }
+      ]
+    ],
+    "scheme": "tga",
+    "experiments": {
+      "typedRoutes": false
+    },
+    "backgroundColor": "#0B0B0B",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0783dfd2-c4b8-4d30-a854-96744790387b"
+      }
+    },
+    "owner": "mahdihemriti"
+  }
+}

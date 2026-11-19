@@ -1,0 +1,23 @@
+# Essai sur le PC (Podman / Docker Desktop) : http://localhost:8080, sans certificat
+:80 {
+	encode zstd gzip
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+	handle /ws {
+		reverse_proxy api:8080
+	}
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		# Règle de contenu : scripts du site seulement, échanges de données avec l'API du site seulement
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws://localhost:8080; frame-src 'self' data: blob: https://www.youtube.com https://www.youtube-nocookie.com https://www.facebook.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		-Server
+	}
+	handle {
+		root * /srv
+		try_files {path} {path}.html /index.html
+		file_server
+	}
+}

@@ -1,0 +1,25 @@
+{
+  "name": "tgl-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "API Tunisia Golden League : comptes, données (PostgreSQL), temps réel (WebSocket), e-mails",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "import": "node src/import.js",
+    "admin": "node src/admin.js",
+    "test": "node --test test/rules.test.js test/schema.test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^10.6.0",
+    "pg": "^8.13.1",
+    "ws": "^8.18.0"
+  }
+}

@@ -1,0 +1,298 @@
+---
+title: Tunisia Golden League — modèle de données (PostgreSQL)
+config:
+  theme: base
+  themeVariables:
+    primaryColor: "#FFF8E6"
+    primaryBorderColor: "#B8892A"
+    primaryTextColor: "#1A1A1A"
+    lineColor: "#5A5248"
+    fontFamily: "Helvetica, Arial, sans-serif"
+    fontSize: "15px"
+  class:
+    hideEmptyMembersBox: true
+---
+classDiagram
+direction LR
+
+namespace Comptes {
+  class Account["accounts"] {
+    +uid : text «PK»
+    +email : text «unique»
+    password_hash : text
+    email_verified : bool
+    disabled : bool
+    must_reset : bool
+    created_at : timestamptz
+    last_login : timestamptz
+  }
+  class OtpCode["otp_codes"] {
+    +uid : text «PK, FK»
+    hash : text
+    expires_at : bigint
+    attempts : int
+  }
+  class ResetCode["reset_codes"] {
+    +code : text «PK»
+    uid : text «FK»
+    expires_at : bigint
+  }
+  class User["users"] {
+    +id : text «PK, FK accounts»
+    name : text
+    phone : text
+    email : text
+    role : Role
+    lang : fr|en
+    team_id : text «FK»
+    company_name : text
+    perms : jsonb
+    followed_team_ids : jsonb
+    deletion_requested_at : timestamptz
+  }
+  class Role {
+    <<enumeration>>
+    user
+    company
+    operator
+    agent
+    admin
+  }
+}
+
+namespace Complexe {
+  class Pitch["pitches"] {
+    +id : text «PK»
+    name : text
+    type : 6v6|7v7
+    active : bool
+    sort_order : int
+    slot_starts : jsonb
+    slot_minutes : int
+    date_slots : jsonb
+    disabled_starts : jsonb
+    photo : text
+  }
+  class Slot["slots"] {
+    +id : text «PK» terrain_date_heure
+    pitch_id : text «FK»
+    date : date
+    start_time : HH:MM
+    end_time : HH:MM
+    status : free|pending|booked|blocked
+    booking_id : text
+    match_id : text
+    expires_at : timestamptz
+  }
+  class Booking["bookings"] {
+    +id : text «PK»
+    slot_id : text
+    pitch_id : text
+    pitch_name : text
+    date : date
+    start_time : HH:MM
+    end_time : HH:MM
+    user_id : text «FK»
+    user_name : text
+    user_phone : text
+    status : BookingStatus
+    created_at : timestamptz
+    expires_at : timestamptz
+    handled_by : text
+    locked_by : text
+    manual : bool
+    amount : numeric
+  }
+  class PrivateBooking["private_bookings"] {
+    même structure que bookings
+    series_id : text
+  }
+  class BookingStatus {
+    <<enumeration>>
+    pending
+    confirmed
+    refused
+    expired
+    cancelled
+  }
+}
+
+namespace Competitions {
+  class Season["seasons"] {
+    +id : text «PK»
+    name : text
+    status : registration|running|finished
+    kind : league|cup
+    category : mixed|over35
+    cup_format : groups|knockout
+    points_win / draw / loss : int
+    yellow_limit : int
+    red_ban_matches : int
+    start_date : date
+    roster_deadline : date
+    lot_order : jsonb
+  }
+  class Team["teams"] {
+    +id : text «PK»
+    season_id : text «FK»
+    owner_id : text «FK users»
+    name : text
+    company : text
+    short_name : text
+    color : text
+    logo_url : text
+    approved : bool
+    request_status : draft|submitted|approved|rejected
+    managers : jsonb
+    coach : jsonb
+    group_name : text
+  }
+  class Player["players"] {
+    +id : text «PK»
+    season_id : text «FK»
+    team_id : text «FK»
+    name : text
+    number : int
+    position : GK|DEF|MID|FWD
+    status : PlayerStatus
+    license_no : text
+    birth_date : date
+    removed_at : timestamptz
+  }
+  class PlayerInfo["player_infos"] {
+    +id : text «PK, FK players»
+    team_id : text «FK»
+    owner_id : text
+    first_name / last_name : text
+    birth_date : date
+    phone, cin, job_title : text
+    cin_file_id … certificate_file_id : text
+  }
+  class StoredFile["stored_files"] {
+    +id : text «PK»
+    team_id : text «FK»
+    owner_id : text
+    kind : cin|photo|attestation|certificate|logo…
+    mime : text
+    size : int
+    data : text data-URI
+  }
+  class Match["matches"] {
+    +id : text «PK»
+    season_id : text «FK»
+    home_team_id : text «FK»
+    away_team_id : text «FK»
+    pitch_id : text «FK»
+    round : int
+    date : date
+    start_time : HH:MM
+    status : MatchStatus
+    home_score / away_score : int
+    home_pens / away_pens : int
+    forfeit : home|away
+    stage : group|ko
+    ko_round : int
+    sheet : jsonb feuille de match
+    home_lineup / away_lineup : jsonb
+  }
+  class MatchEvent["match_events"] {
+    +id : text «PK»
+    match_id : text «FK»
+    season_id : text «FK»
+    team_id : text «FK»
+    type : goal|penalty_goal|own_goal|yellow|red|sub
+    minute : int
+    half : 1|2
+    player_id : text
+    assist_id : text
+    player_in_id : text
+  }
+  class PlayerStatus {
+    <<enumeration>>
+    draft
+    pending
+    approved
+    rejected
+    removed
+  }
+  class MatchStatus {
+    <<enumeration>>
+    scheduled
+    first_half
+    half_time
+    second_half
+    finished
+    postponed
+  }
+}
+
+namespace Contenus_et_notifications {
+  class News["news"] {
+    +id : text «PK»
+    type : article|video|gallery|award
+    title : text
+    body : text
+    match_id : text «FK»
+    team_id : text «FK»
+  }
+  class ShowcaseItem["showcase_items"] {
+    +id : text «PK»
+    kind : slide|video
+    title : text
+    image : text
+    video_url : text
+    sort_order : int
+  }
+  class InboxItem["inbox_items"] {
+    +id : text «PK»
+    user_id : text «FK»
+    audience : staff
+    fr / en : jsonb
+    url : text
+  }
+  class PushToken["push_tokens"] {
+    +id : text «PK»
+    token : text
+    user_id : text
+    staff : bool
+    followed_team_ids : jsonb
+    prefs : jsonb
+  }
+  class Setting["settings"] {
+    +id : text «PK» app | whatsapp
+    value : jsonb
+  }
+}
+
+Account "1" -- "0..1" User : profil
+Account "1" *-- "0..1" OtpCode
+Account "1" *-- "0..*" ResetCode
+User ..> Role
+
+Pitch "1" *-- "0..*" Slot : créneaux occupés
+User "0..1" -- "0..*" Booking : client
+User "0..1" -- "0..*" PrivateBooking : client
+Booking ..> BookingStatus
+Slot ..> Booking : booking_id
+Slot ..> Match : match_id
+
+Season "1" *-- "0..*" Team
+Season "1" *-- "0..*" Match
+User "0..1" -- "0..*" Team : gère (owner_id)
+User "0..*" -- "0..1" Team : équipe liée (team_id)
+Team "1" *-- "0..*" Player : effectif (18 max)
+Player "1" *-- "0..1" PlayerInfo : données privées
+Team "1" *-- "0..*" StoredFile : pièces jointes
+Team "1" -- "0..*" Match : domicile
+Team "1" -- "0..*" Match : extérieur
+Pitch "0..1" -- "0..*" Match : terrain
+Match "1" *-- "0..*" MatchEvent : faits de match
+Team "1" -- "0..*" MatchEvent
+MatchEvent ..> Player : joueur, passeur
+Player ..> PlayerStatus
+Match ..> MatchStatus
+
+Match "0..1" -- "0..*" News
+Team "0..1" -- "0..*" News
+User "1" *-- "0..*" InboxItem
+User ..> PushToken : user_id

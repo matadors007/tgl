@@ -1,0 +1,80 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# macOS / Windows
+.DS_Store
+Thumbs.db
+desktop.ini
+*.pem
+
+# typescript
+*.tsbuildinfo
+
+# ───────────── Secrets (jamais sur GitHub) ─────────────
+.env
+.env.*
+!.env.example
+!deploy/.env.example
+# Clé du compte de service Firebase
+serviceAccount.json
+*serviceAccount*.json
+# Config Firebase Android (générée)
+google-services.json
+GoogleService-Info.plist
+functions/.env
+deploy/.env
+deploy/serveur.txt
+
+# ───────────── Données personnelles et sauvegardes ─────────────
+export-firebase.json
+utilisateurs.csv
+sauvegardes/
+deploy/backups/
+scripts/seed-data/
+
+# ───────────── Builds (générés, trop lourds) ─────────────
+/ios
+/android
+*.apk
+*.aab
+functions/node_modules/
+server/node_modules/
+
+# ───────────── Documents et fichiers de travail locaux ─────────────
+# Documents Word (comptes de test, cahier des charges, guide) : gardés hors du dépôt
+*.docx
+~$*
+Logo_GFL.jfif
+Claude outputs/
+_a_supprimer/
+*.old
+.firebase/
+.qodo/
+.claude/
+graphify-out/

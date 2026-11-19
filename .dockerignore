@@ -1,0 +1,24 @@
+# Jamais dans les images : clés, données personnelles, fichiers locaux
+serviceAccount.json
+*serviceAccount*.json
+export-firebase.json
+utilisateurs.csv
+.env
+.env.*
+deploy/.env
+node_modules
+server/node_modules
+dist
+web-build
+android
+ios
+.expo
+.git
+*.jks
+*.p8
+*.p12
+*.key
+functions/node_modules
+_a_supprimer
+scripts/seed-data
+sauvegardes
