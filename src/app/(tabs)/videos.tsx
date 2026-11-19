@@ -13,7 +13,7 @@ import { FullscreenVideo } from '@/ui/Fullscreen';
 export default function VideosScreen() {
   const { t, showcase } = useApp();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const videos = useMemo(() => showcase.filter((i) => i.kind === 'video' && i.active), [showcase]);
+  const videos = useMemo(() => showcase.filter((i) => i.kind === 'video' && i.active && !i.championshipId), [showcase]);
   const [current, setCurrent] = useState<string | null>(id ?? null);
   useEffect(() => {
     if (id) setCurrent(id);

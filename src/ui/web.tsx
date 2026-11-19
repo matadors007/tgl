@@ -75,7 +75,6 @@ function useNavLinks(): NavLink[] {
     // Entreprise : « Mon équipe » en 2e position, puis « Championnat »
     { href: '/company', label: 'tab.company', icon: 'business', show: isCompany },
     { href: '/matches', label: 'tab.championship', icon: 'trophy', show: true, badge: live || undefined },
-    { href: '/videos', label: 'tab.videos', icon: 'play-circle', show: !isCompany && !isOperator },
     { href: '/about', label: 'tab.about', icon: 'information-circle', show: !isStaff && !isCompany },
     // Administration : tout le personnel (Terrains, Championnats… selon les permissions)
     { href: '/admin', label: 'admin.title', icon: 'shield-checkmark', show: isStaff && !isOperator },

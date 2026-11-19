@@ -374,6 +374,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       prefs:
         user?.role === 'admin'
           ? { ...pushPrefs, bookings: true }
+          : user?.role === 'agent'
+            ? // Agent : uniquement les réservations (toujours actives, réglage masqué)
+              { ...pushPrefs, matches: false, allTeams: false, goals: false, cards: false, status: false, bookings: true }
           : user?.role === 'operator'
             ? // Opérateur : notifications désactivées (sauf le rappel local des matchs du jour)
               { ...pushPrefs, matches: false, allTeams: false, bookings: false }

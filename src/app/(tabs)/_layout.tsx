@@ -41,7 +41,7 @@ export default function TabsLayout() {
       />
       {/* Classements : dans l'onglet Championnat (bouton « Classements ») */}
       <Tabs.Screen name="standings" options={{ title: t('tab.standings'), tabBarIcon: icon('trophy'), href: null }} />
-      <Tabs.Screen name="videos" options={{ title: t('tab.videos'), tabBarIcon: icon('play-circle'), href: isCompany || isOperator ? null : undefined }} />
+      <Tabs.Screen name="videos" options={{ title: t('tab.videos'), tabBarIcon: icon('play-circle'), href: null }} />
       {/* « À propos » : accessible depuis l'accueil */}
       <Tabs.Screen name="about" options={{ title: t('tab.about'), tabBarIcon: icon('information-circle'), href: null }} />
       {/* Terrains : accessibles depuis l'Administration */}

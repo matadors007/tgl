@@ -1328,6 +1328,8 @@ export interface ShowcaseItem {
   image?: string | null;
   /** Vidéo : lien YouTube, Facebook ou fichier .mp4. */
   videoUrl?: string | null;
+  /** Vidéo : championnat où elle apparaît (rubrique « Highlights ») ; absent = page d'accueil. */
+  championshipId?: string | null;
   order: number;
   active: boolean;
   createdAt: number;

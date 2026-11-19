@@ -30,7 +30,7 @@ export default function HomeScreen() {
   }, [store, user, canBookPitch]);
 
   const slides = useMemo(() => carouselSlides(showcase, t), [showcase, t]);
-  const videos = useMemo(() => showcase.filter((i) => i.kind === 'video' && i.active), [showcase]);
+  const videos = useMemo(() => showcase.filter((i) => i.kind === 'video' && i.active && !i.championshipId), [showcase]);
   const live = matchesAll.filter(isLive);
   // Prochains matchs et derniers résultats, championnat par championnat
   const perChamp = useMemo(

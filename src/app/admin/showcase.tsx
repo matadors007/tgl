@@ -7,7 +7,7 @@ import { deleteUploadedVideo, isApiConfigured, isUploadedVideo, uploadVideo, VID
 import { videoSource, videoThumbnail, type Pitch, type ShowcaseItem } from '@/domain/model';
 import { Guard } from '@/ui/Guard';
 import { ask, notify } from '@/ui/dialogs';
-import { Button, Card, Empty, Field, Row, Screen, Section, Segmented, Sheet } from '@/ui/kit';
+import { Button, Card, Dropdown, Empty, Field, Row, Screen, Section, Segmented, Sheet } from '@/ui/kit';
 import { pickImage } from '@/ui/pickImage';
 import { imageSource } from '@/ui/showcase';
 import { colors, font, radius } from '@/ui/theme';
@@ -35,7 +35,7 @@ function ShowcaseAdmin() {
 }
 
 /** Choix d'une photo : galerie du téléphone ou lien. */
-export function PhotoPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function PhotoPicker({ value, onChange, noUrl }: { value: string; onChange: (v: string) => void; noUrl?: boolean }) {
   const { t } = useApp();
   const [busy, setBusy] = useState(false);
   const pick = async () => {
@@ -61,8 +61,12 @@ export function PhotoPicker({ value, onChange }: { value: string; onChange: (v: 
         </View>
       ) : null}
       <Button label={t('showcase.pickPhoto')} icon="image" variant="secondary" onPress={pick} loading={busy} />
-      <View style={{ height: 10 }} />
-      <Field label={t('showcase.orUrl')} value={isData ? '' : value} onChangeText={onChange} autoCapitalize="none" placeholder="https://…" />
+      {noUrl ? null : (
+        <>
+          <View style={{ height: 10 }} />
+          <Field label={t('showcase.orUrl')} value={isData ? '' : value} onChangeText={onChange} autoCapitalize="none" placeholder="https://…" />
+        </>
+      )}
     </View>
   );
 }
@@ -139,7 +143,8 @@ function VideoUploader({ onUploaded, onBusy }: { onUploaded: (url: string, name:
 }
 
 function ItemsTab({ kind }: { kind: 'slide' | 'video' }) {
-  const { t, showcase, services } = useApp();
+  const { t, showcase, services, championships } = useApp();
+  const champName = (id?: string | null) => (id ? championships.find((c) => c.id === id)?.name ?? '—' : t('showcase.targetHome'));
   const items = showcase.filter((i) => i.kind === kind);
   const [edit, setEdit] = useState<Partial<ShowcaseItem> | null>(null);
   const [busy, setBusy] = useState(false);
@@ -171,9 +176,10 @@ function ItemsTab({ kind }: { kind: 'slide' | 'video' }) {
         createdAt: edit.createdAt,
         kind,
         title: edit.title?.trim() ?? '',
-        subtitle: edit.subtitle?.trim() || null,
+        subtitle: kind === 'video' ? null : edit.subtitle?.trim() || null,
         image: edit.image || null,
         videoUrl: kind === 'video' ? edit.videoUrl?.trim() : null,
+        championshipId: kind === 'video' ? edit.championshipId || null : null,
         order: edit.order ?? (items.length ? Math.max(...items.map((i) => i.order)) + 1 : 0),
         active: edit.active ?? true,
       });
@@ -209,7 +215,7 @@ function ItemsTab({ kind }: { kind: 'slide' | 'video' }) {
       <Button
         label={kind === 'slide' ? t('showcase.addSlide') : t('showcase.addVideo')}
         icon="add"
-        onPress={() => setEdit({ title: '', subtitle: '', image: '', videoUrl: '' })}
+        onPress={() => setEdit({ title: '', subtitle: '', image: '', videoUrl: '', championshipId: null })}
       />
       {kind === 'slide' && !items.length ? <Text style={[font.small, { marginTop: 10 }]}>{t('showcase.defaultsInfo')}</Text> : null}
       {kind === 'video' && !items.length ? <Empty text={t('videos.empty')} icon="play-circle-outline" /> : null}
@@ -226,7 +232,14 @@ function ItemsTab({ kind }: { kind: 'slide' | 'video' }) {
                   <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>
                     {it.title || '—'}
                   </Text>
-                  {it.subtitle ? (
+                  {kind === 'video' ? (
+                    <Row style={{ gap: 4 }}>
+                      <Ionicons name={it.championshipId ? 'trophy' : 'home'} size={11} color={colors.accent} />
+                      <Text style={font.tiny} numberOfLines={1}>
+                        {champName(it.championshipId)}
+                      </Text>
+                    </Row>
+                  ) : it.subtitle ? (
                     <Text style={font.tiny} numberOfLines={1}>
                       {it.subtitle}
                     </Text>
@@ -277,9 +290,23 @@ function ItemsTab({ kind }: { kind: 'slide' | 'video' }) {
               <Field label={t('showcase.videoUrl')} value={edit.videoUrl ?? ''} onChangeText={(v) => setEdit({ ...edit, videoUrl: v })} autoCapitalize="none" placeholder="https://youtu.be/…" />
             ) : null}
             <Field label={t('showcase.title')} value={edit.title ?? ''} onChangeText={(v) => setEdit({ ...edit, title: v })} />
-            <Field label={t('showcase.subtitle')} value={edit.subtitle ?? ''} onChangeText={(v) => setEdit({ ...edit, subtitle: v })} />
+            {kind === 'video' ? (
+              <Dropdown
+                label={t('showcase.target')}
+                value={edit.championshipId ?? ''}
+                onChange={(v) => setEdit({ ...edit, championshipId: v || null })}
+                options={[
+                  { value: '', label: t('showcase.targetHome'), icon: 'home' },
+                  ...championships.map((c) => ({ value: c.id, label: c.name, icon: 'trophy' as const })),
+                  // Championnat archivé encore choisi : reste affiché
+                  ...(edit.championshipId && !championships.some((c) => c.id === edit.championshipId) ? [{ value: edit.championshipId, label: '—', icon: 'trophy' as const }] : []),
+                ]}
+              />
+            ) : (
+              <Field label={t('showcase.subtitle')} value={edit.subtitle ?? ''} onChangeText={(v) => setEdit({ ...edit, subtitle: v })} />
+            )}
             {kind === 'video' ? <Text style={[font.small, { marginBottom: 8 }]}>{t('showcase.thumbHint')}</Text> : null}
-            <PhotoPicker value={edit.image ?? ''} onChange={(v) => setEdit({ ...edit, image: v })} />
+            <PhotoPicker value={edit.image ?? ''} onChange={(v) => setEdit({ ...edit, image: v })} noUrl={kind === 'video'} />
             <Button label={t('common.save')} icon="save" onPress={save} loading={busy} disabled={uploading} />
           </View>
         ) : null}

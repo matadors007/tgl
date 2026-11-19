@@ -76,8 +76,8 @@ export default function ProfileScreen() {
         </Section>
       ) : null}
 
-      {/* Administrateur : pas de réglage, les notifications de réservation sont toujours actives */}
-      {!isAdmin && !isCompany && !isOperator ? (
+      {/* Personnel (admin, agent, opérateur) et entreprise : pas de réglage, notifications fixées automatiquement */}
+      {!isStaff && !isCompany ? (
       <Section title={t('notif.title')}>
         <Card>
           <Text style={[font.small, { marginBottom: 8, color: pushToken ? colors.success : colors.orange }]}>

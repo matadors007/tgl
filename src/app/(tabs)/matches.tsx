@@ -6,12 +6,13 @@ import { isLive, type Match } from '@/domain/model';
 import { MatchRow } from '@/ui/football';
 import { stageSections } from '@/ui/stage';
 import { StandingsPanel } from './standings';
+import { HighlightsPanel } from '@/ui/highlights';
 import { OperatorChampionship } from '@/ui/operator';
 import { dayLabel } from '@/ui/format';
 import { Empty, Header, Screen, Segmented } from '@/ui/kit';
 import { colors, font, radius } from '@/ui/theme';
 
-type Filter = 'mine' | 'all' | 'live' | 'finished' | 'upcoming' | 'favorites' | 'standings';
+type Filter = 'mine' | 'all' | 'live' | 'finished' | 'upcoming' | 'favorites' | 'standings' | 'highlights';
 
 function MatchesScreenInner() {
   const { t, lang, matches, season, followedMatchIds, followedTeamIds, isCompany, myTeams } = useApp();
@@ -27,7 +28,7 @@ function MatchesScreenInner() {
     // Favoris : matchs suivis (étoile) et matchs des équipes suivies
     if (filter === 'favorites')
       list = matches.filter((m) => followedMatchIds.includes(m.id) || followedTeamIds.includes(m.homeTeamId) || followedTeamIds.includes(m.awayTeamId));
-    if (filter === 'standings') list = [];
+    if (filter === 'standings' || filter === 'highlights') list = [];
     // Entreprise : calendrier de son équipe
     if (filter === 'mine') list = matches.filter((m) => myIds.includes(m.homeTeamId) || myIds.includes(m.awayTeamId));
     return stageSections(list, t, filter === 'finished');
@@ -49,12 +50,14 @@ function MatchesScreenInner() {
           { value: 'upcoming', label: t('match.upcomingTab') },
           { value: 'favorites', label: `★ ${t('match.favorites')}` },
           { value: 'standings', label: t('tab.standings') },
+          { value: 'highlights', label: t('hl.tab'), icon: 'film' },
         ]}
       />
       <View style={{ height: 12 }} />
       {filter === 'standings' ? <StandingsPanel /> : null}
+      {filter === 'highlights' ? <HighlightsPanel /> : null}
       {filter === 'favorites' ? <Text style={[font.small, { marginBottom: 10 }]}>{t('match.favoritesHint')}</Text> : null}
-      {!groups.length && filter !== 'standings' ? <Empty text={season ? (filter === 'favorites' ? t('match.noFavorites') : t('common.empty')) : t('st.noSeason')} icon={filter === 'favorites' ? 'star-outline' : undefined} /> : null}
+      {!groups.length && filter !== 'standings' && filter !== 'highlights' ? <Empty text={season ? (filter === 'favorites' ? t('match.noFavorites') : t('common.empty')) : t('st.noSeason')} icon={filter === 'favorites' ? 'star-outline' : undefined} /> : null}
       {groups.map(({ key, label, matches: list }) => {
         const dates = [...new Set(list.map((m) => m.date))];
         return (

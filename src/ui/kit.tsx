@@ -154,7 +154,7 @@ export function Segmented<T extends string>({
   onChange,
   scroll,
 }: {
-  options: { value: T; label: string; badge?: number }[];
+  options: { value: T; label: string; badge?: number; icon?: IconName }[];
   value: T;
   onChange: (v: T) => void;
   scroll?: boolean;
@@ -163,6 +163,7 @@ export function Segmented<T extends string>({
     const active = o.value === value;
     return (
       <Pressable key={o.value} onPress={() => onChange(o.value)} style={[styles.seg, active && styles.segActive]}>
+        {o.icon ? <Ionicons name={o.icon} size={14} color={active ? colors.onAccent : colors.muted} style={{ marginRight: 5 }} /> : null}
         <Text style={[styles.segText, active && styles.segTextActive]}>{o.label}</Text>
         {o.badge ? (
           <View style={styles.segBadge}>
@@ -220,6 +221,64 @@ export function Field({ label, style, ...props }: TextInputProps & { label: stri
     <View style={{ marginBottom: space.md }}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput placeholderTextColor={colors.faint} style={[styles.input, style]} {...props} />
+    </View>
+  );
+}
+
+/** Liste déroulante : un champ qui s'ouvre sur la liste des choix. */
+export function Dropdown<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string; icon?: IconName }[];
+  onChange: (v: T) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const current = options.find((o) => o.value === value);
+  return (
+    <View style={{ marginBottom: space.md }}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <Pressable
+        onPress={() => setOpen(!open)}
+        accessibilityRole="button"
+        style={[styles.input, { flexDirection: "row", alignItems: "center" }, open && { borderColor: colors.accent }]}
+      >
+        {current?.icon ? <Ionicons name={current.icon} size={16} color={colors.accent} style={{ marginRight: 8 }} /> : null}
+        <Text style={{ color: colors.text, fontSize: 15, flex: 1 }} numberOfLines={1}>
+          {current?.label ?? "—"}
+        </Text>
+        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={colors.muted} />
+      </Pressable>
+      {open ? (
+        <View style={{ marginTop: 4, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.bgElevated, overflow: "hidden" }}>
+          {options.map((o, i) => {
+            const sel = o.value === value;
+            return (
+              <Pressable
+                key={o.value}
+                onPress={() => {
+                  onChange(o.value);
+                  setOpen(false);
+                }}
+                style={({ pressed }) => [
+                  { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 11 },
+                  i > 0 && { borderTopWidth: 1, borderTopColor: colors.border },
+                  sel && { backgroundColor: colors.accentSoft },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                {o.icon ? <Ionicons name={o.icon} size={16} color={sel ? colors.accent : colors.muted} style={{ marginRight: 8 }} /> : null}
+                <Text style={{ color: sel ? colors.accent : colors.text, fontSize: 15, flex: 1, fontWeight: sel ? "700" : "400" }}>{o.label}</Text>
+                {sel ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }
